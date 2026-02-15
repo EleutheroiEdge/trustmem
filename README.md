@@ -9,6 +9,20 @@ Local-first memory layer for agents: distilled memory logs + canonical vault gen
 - Deterministic project/person extraction via `projects-map.yaml`.
 - No shared API keys.
 
+## Requirements
+
+- OS:
+  - Linux/macOS recommended
+  - Windows requires WSL2 (or Git Bash-compatible environment)
+- Dependencies:
+  - `bash`
+  - `ripgrep` (`rg`)
+  - `awk`
+  - `sed`
+  - `node` (used by `trustmem doctor` guardrail checks)
+- Permissions:
+  - `chmod +x bin/trustmem scripts/*.sh`
+
 ## Security and OSS shipping rules
 
 - Never commit `.env` or any real API key.
@@ -28,9 +42,7 @@ OpenClaw single-model embedding config will not route this correctly without pat
 ## Quickstart
 
 ```bash
-chmod +x bin/trustmem scripts/*.sh
-cp .env.example .env
-cp projects-map.example.yaml projects-map.yaml
+./scripts/install.sh
 ./bin/trustmem doctor
 ```
 
@@ -46,13 +58,16 @@ cp projects-map.example.yaml projects-map.yaml
 ## Files shipped for open source
 
 - `.gitignore`
+- `.gitattributes`
 - `.env.example`
 - `config.example.yaml`
 - `projects-map.example.yaml`
 - `projects/project.example.md`
 - `examples/`
+- `.github/workflows/ci.yml`
 - `bin/trustmem`
 - `scripts/doctor.sh`
+- `scripts/install.sh`
 - `scripts/memoryctl.sh`
 - `scripts/vault_sync.sh`
 - `ROADMAP.md`
@@ -60,6 +75,12 @@ cp projects-map.example.yaml projects-map.yaml
 - `SECURITY.md`
 - `CONTRIBUTING.md`
 - `CHANGELOG.md`
+
+## CI
+
+- GitHub Actions workflow runs:
+  - `trustmem doctor` on Ubuntu and macOS
+  - `shellcheck` on shell scripts (Ubuntu)
 
 ## Files not shipped
 
