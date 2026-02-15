@@ -1,53 +1,35 @@
 # TrustMem
 
-Local-first memory layer for agents: distilled memory logs + canonical vault generation.
+Local-first memory for AI agents: distilled notes -> canonical Markdown vault (with backlinks), with deterministic scoping and hard safety defaults.
 
-## Scope
+## What it does
+- Stores distilled memory logs in `memory/*.md` (no raw chat by default).
+- Generates and updates a canonical vault in `vault/` (human-editable Markdown, backlink-friendly).
+- Enforces deterministic scoping (projects/people/roles) via `projects-map.yaml`.
+- Ships safe-by-default: no shared API keys, secrets blocked, local-first defaults.
 
-- Local-first storage by default.
-- Distilled memory (`memory/*.md`) -> canonical vault (`vault/`) sync.
-- Deterministic project/person extraction via `projects-map.yaml`.
-- No shared API keys.
-
-## Requirements
-
-- OS:
-  - Linux/macOS recommended
-  - Windows requires WSL2 (or Git Bash-compatible environment)
-- Dependencies:
-  - `bash`
-  - `ripgrep` (`rg`)
-  - `awk`
-  - `sed`
-  - `node` (used by `trustmem doctor` guardrail checks)
-- Permissions:
-  - `chmod +x bin/trustmem scripts/*.sh`
-
-## Security and OSS shipping rules
-
-- Never commit `.env` or any real API key.
-- Never hardcode secrets in config.
-- Default to local embeddings for OSS distribution.
-- Remote embeddings must be user-provided (BYO key).
-- Commit only templates/examples; keep local generated memory and personal maps untracked.
-
-## NVIDIA embedding guardrail
-
-`nv-embedqa-e5-v5` is dual-mode:
-- indexing: `nvidia/nv-embedqa-e5-v5-passage`
-- querying: `nvidia/nv-embedqa-e5-v5-query`
-
-OpenClaw single-model embedding config will not route this correctly without patch/provider support for separate index/query models.
+## Memory Flow
+```mermaid
+flowchart LR
+  A[Intake] --> B[Distill]
+  B --> C[Canonical Vault]
+  C --> D[Retrieve]
+  D --> E[Agent Context]
+  C -.vault-first.-> D
+  F[Vector Index] -.second-pass semantic.-> D
+```
 
 ## Quickstart
-
 ```bash
 ./scripts/install.sh
 ./bin/trustmem doctor
 ```
 
-## CLI
+## Requirements
+- Linux/macOS recommended. Windows: WSL2 (or Git Bash-compatible environment).
+- Dependencies: `bash`, `rg`, `awk`, `sed`, `node`
 
+## Commands
 ```bash
 ./bin/trustmem doctor
 ./bin/trustmem remember "Important preference"
@@ -55,8 +37,25 @@ OpenClaw single-model embedding config will not route this correctly without pat
 ./bin/trustmem sync --rebuild
 ```
 
-## Files shipped for open source
+## Security
+- Never commit `.env` or any real API keys.
+- Default is local embeddings for OSS; remote embeddings require BYO key.
 
+## NVIDIA Embeddings (OpenClaw)
+`nv-embedqa-e5-v5` is dual-mode:
+- indexing: `nvidia/nv-embedqa-e5-v5-passage`
+- querying: `nvidia/nv-embedqa-e5-v5-query`
+
+OpenClaw single-model embedding config cannot route index vs query correctly without provider or patch support.
+
+## Repo Layout
+Tracked: templates, examples, scripts, docs.
+Untracked: `.env`, `projects-map.yaml`, `memory/`, `vault/`, `vault-backups/`.
+
+> `examples/cursor.mcp.example.json` and `examples/claude-desktop.mcp.example.json` are placeholders until MCP server wiring is finalized.
+
+## Development
+### Included in this repo
 - `.gitignore`
 - `.gitattributes`
 - `.env.example`
@@ -76,21 +75,10 @@ OpenClaw single-model embedding config will not route this correctly without pat
 - `CONTRIBUTING.md`
 - `CHANGELOG.md`
 
-## CI
-
-- GitHub Actions workflow runs:
-  - `trustmem doctor` on Ubuntu and macOS
-  - `shellcheck` on shell scripts (Ubuntu)
-
-## Files not shipped
-
+### Local-only (not committed)
 - `.env`
 - `projects-map.yaml`
 - `projects/*.md` (except `projects/project.example.md`)
 - `memory/`
 - `vault/`
 - `vault-backups/`
-
-## Notes
-
-- `examples/cursor.mcp.example.json` and `examples/claude-desktop.mcp.example.json` are placeholders until MCP server command wiring is finalized.
