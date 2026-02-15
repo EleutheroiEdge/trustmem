@@ -1,0 +1,33 @@
+version: 1
+updated_at: 2026-02-15
+owner: USER_NAME
+
+identity:
+  canonical_name: USER_NAME
+  aliases: []
+  x_account: ""
+  linkedin: ""
+  website: ""
+  github_accounts:
+    - username: ""
+      visibility: public
+      purpose: primary
+
+projects:
+  sample-project:
+    name: Sample Project
+    repo: owner/repo
+    visibility: private
+    default_branch: main
+    github_url: https://github.com/owner/repo
+    description: ""
+    marketable: true
+    priority: active
+    complexity: medium
+    websites:
+      app: https://example.com
+    aliases:
+      - sample project
+      - example.com
+
+lineage: []

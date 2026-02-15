@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "trustmem": {
+      "command": "/ABS/PATH/TO/trustmem/bin/trustmem",
+      "args": ["doctor"]
+    }
+  }
+}

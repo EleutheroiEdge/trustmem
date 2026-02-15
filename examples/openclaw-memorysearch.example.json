@@ -1,0 +1,21 @@
+{
+  "agents": {
+    "defaults": {
+      "memorySearch": {
+        "enabled": true,
+        "sources": ["memory"],
+        "extraPaths": [
+          "/ABS/PATH/TO/trustmem/vault",
+          "/ABS/PATH/TO/trustmem/policies/clawbot-memory-policy.yaml",
+          "/ABS/PATH/TO/trustmem/projects-map.yaml"
+        ],
+        "provider": "openai",
+        "remote": {
+          "baseUrl": "https://api.openai.com/v1",
+          "apiKey": "${OPENAI_API_KEY}"
+        },
+        "model": "text-embedding-3-small"
+      }
+    }
+  }
+}

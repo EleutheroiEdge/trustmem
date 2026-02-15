@@ -1,0 +1,46 @@
+project: clawbot
+mode: auto_distilled
+archive: false
+scope:
+  project_id: clawbot
+  role_default: dev
+  privacy_mode: high
+retention:
+  summaries_days: 30
+  todos_days: 90
+  decisions_days: 365
+  preferences_days: 3650
+filters:
+  store_categories:
+    - decisions
+    - preferences
+    - constraints
+    - todos
+  block_patterns:
+    - "BEGIN PRIVATE KEY"
+    - "sk-"
+    - "AKIA"
+    - "xoxb-"
+    - "ghp_"
+  never_store:
+    - raw_credentials
+    - full_transcripts
+    - private_personal_data
+controls:
+  confirmation:
+    sensitive: always_ask
+    ambiguous: review_queue
+  commands:
+    remember: "/remember <text>"
+    forget: "/forget <selector>"
+    memory_off: "/memory off"
+    memory_export: "/memory export"
+
+embeddings:
+  default_provider: openai
+  nvidia_dual_mode_required: true
+  nvidia_note: >
+    nv-embedqa-e5-v5 requires index/query split:
+    nvidia/nv-embedqa-e5-v5-passage for indexing and
+    nvidia/nv-embedqa-e5-v5-query for searching.
+    Single-model embedding integrations should warn or fail fast.

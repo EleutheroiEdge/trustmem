@@ -1,0 +1,39 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+TRUSTMEM_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
+
+usage() {
+  cat <<'USAGE'
+Usage:
+  trustmem doctor
+  trustmem remember "<text>"
+  trustmem forget "<pattern>"
+  trustmem sync [--rebuild]
+
+Environment:
+  TRUSTMEM_DIR, WORKSPACE, MEM_DIR
+USAGE
+}
+
+if [[ $# -lt 1 ]]; then
+  usage
+  exit 2
+fi
+
+cmd="$1"
+shift
+
+case "${cmd}" in
+  doctor)
+    exec "${TRUSTMEM_DIR}/scripts/doctor.sh" "$@"
+    ;;
+  remember|forget|sync)
+    exec "${TRUSTMEM_DIR}/scripts/memoryctl.sh" "${cmd}" "$@"
+    ;;
+  *)
+    usage
+    exit 2
+    ;;
+esac

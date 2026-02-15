@@ -1,0 +1,47 @@
+# Secrets and local env
+.env
+.env.*
+!.env.example
+*.env.local
+
+# Local/generated data
+vault/
+vault-backups/
+memory/
+data/
+projects-map.yaml
+projects-map.yml
+config.yaml
+config.yml
+config.local.yaml
+config.local.yml
+projects/*.md
+!projects/project.example.md
+*.sqlite
+*.sqlite3
+
+# Logs and runtime
+logs/
+tmp/
+*.log
+*.pid
+
+# Build/artifacts
+dist/
+build/
+coverage/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Node
+node_modules/
+
+# OS/editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/

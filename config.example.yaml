@@ -1,0 +1,33 @@
+version: 1
+
+storage:
+  # Local-first defaults
+  driver: sqlite
+  db_path: ./data/trustmem.sqlite3
+  vault_dir: ./vault
+
+memory:
+  mode: auto_distilled
+  archive: false
+  project_id: default
+
+embeddings:
+  # Default to local/permissive mode when shipping OSS.
+  provider: local
+  model: nomic-embed-text
+  remote:
+    base_url: ""
+    api_key_env: ""
+
+  # NVIDIA note:
+  # nv-embedqa-e5-v5 requires dual mode:
+  # - index -> nvidia/nv-embedqa-e5-v5-passage
+  # - query -> nvidia/nv-embedqa-e5-v5-query
+  # A single-model integration should not enable this path.
+
+policy:
+  never_store_patterns:
+    - "BEGIN PRIVATE KEY"
+    - "sk-"
+    - "ghp_"
+    - "AKIA"
