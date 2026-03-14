@@ -106,6 +106,7 @@ main() {
   check_file "${TRUSTMEM_DIR}/projects-map.example.yaml"
   check_file "${TRUSTMEM_DIR}/scripts/memoryctl.sh"
   check_file "${TRUSTMEM_DIR}/scripts/vault_sync.sh"
+  check_file "${TRUSTMEM_DIR}/scripts/livelearn.sh"
 
   scan_secrets "${TRUSTMEM_DIR}"
   check_openclaw_embedding_guardrail

@@ -7,6 +7,8 @@
   - `queryModel` for retrieval/search operations
 - Add explicit guardrail error when a dual-mode model is configured in a single-model path.
 - Add MCP server command wiring (`trustmem mcp serve`) for Cursor/Claude Desktop.
+- ~~Continuous live-learning engine (score, decay, consolidate, prune).~~ **Done.**
+- ~~Unified memory lifecycle with intake-assigned IDs and manifest-based promotion.~~ **Done.**
 
 ## NVIDIA embedding note
 
