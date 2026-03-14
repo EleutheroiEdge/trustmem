@@ -60,6 +60,21 @@ line_hash() {
   printf '%s' "$1" | sha1sum | cut -c1-16
 }
 
+# Strip leading bullet and timestamp from a memory line.
+clean_line() {
+  printf '%s' "$1" | sed -E 's/^- +//; s/^\[[0-9]{2}:[0-9]{2}:[0-9]{2}\] +//'
+}
+
+# Calculate boost toward ceiling (diminishing returns).
+calculate_boost() {
+  local score="$1" pct="$2"
+  local boost=$(( (100 - score) * pct / 100 ))
+  if [[ "${boost}" -lt 1 ]]; then
+    boost=1
+  fi
+  printf '%s' "${boost}"
+}
+
 # ── Score storage ────────────────────────────────────────────────────
 # Format: hash \t score \t last_accessed_epoch \t created_epoch \t reinforcements \t snippet
 
@@ -118,7 +133,7 @@ cmd_score() {
         continue
       fi
       local cleaned
-      cleaned="$(printf '%s' "${raw_line}" | sed -E 's/^- +//; s/^\[[0-9]{2}:[0-9]{2}:[0-9]{2}\] +//')"
+      cleaned="$(clean_line "${raw_line}")"
       if [[ -z "${cleaned}" ]]; then
         continue
       fi
@@ -157,10 +172,8 @@ cmd_reinforce() {
       continue
     fi
     if printf '%s\n' "${snippet}" | rg -Fqi -- "${pattern}"; then
-      local boost=$(( (100 - score) * REINFORCE_PCT / 100 ))
-      if [[ "${boost}" -lt 1 ]]; then
-        boost=1
-      fi
+      local boost
+      boost="$(calculate_boost "${score}" "${REINFORCE_PCT}")"
       local new_score=$(( score + boost ))
       if [[ "${new_score}" -gt 100 ]]; then
         new_score=100
@@ -235,14 +248,14 @@ cmd_consolidate() {
         continue
       fi
       local cleaned
-      cleaned="$(printf '%s' "${raw_line}" | sed -E 's/^- +//; s/^\[[0-9]{2}:[0-9]{2}:[0-9]{2}\] +//')"
+      cleaned="$(clean_line "${raw_line}")"
       if [[ -z "${cleaned}" ]]; then
         printf '%s\n' "${raw_line}" >> "${tmpfile}"
         continue
       fi
       local hash
       hash="$(line_hash "${cleaned}")"
-      if [[ -n "${seen_hashes[${hash}]+_}" ]]; then
+      if [[ -v seen_hashes["${hash}"] ]]; then
         # Duplicate found – skip this line
         merged=$((merged + 1))
         file_changed=true
@@ -300,7 +313,7 @@ cmd_prune() {
           continue
         fi
         local cleaned
-        cleaned="$(printf '%s' "${raw_line}" | sed -E 's/^- +//; s/^\[[0-9]{2}:[0-9]{2}:[0-9]{2}\] +//')"
+        cleaned="$(clean_line "${raw_line}")"
         if [[ -z "${cleaned}" ]]; then
           printf '%s\n' "${raw_line}" >> "${tmpfile}"
           continue
@@ -340,10 +353,8 @@ cmd_recall() {
     if printf '%s\n' "${snippet}" | rg -Fqi -- "${query}"; then
       printf '[score:%3d reinf:%d] %s\n' "${score}" "${reinforcements}" "${snippet}"
       # Boost on recall – a lighter touch than explicit reinforce
-      local boost=$(( (100 - score) * 5 / 100 ))
-      if [[ "${boost}" -lt 1 ]]; then
-        boost=1
-      fi
+      local boost
+      boost="$(calculate_boost "${score}" 5)"
       local new_score=$(( score + boost ))
       if [[ "${new_score}" -gt 100 ]]; then
         new_score=100
