@@ -11,6 +11,11 @@ Usage:
   trustmem remember "<text>"
   trustmem forget "<pattern>"
   trustmem sync [--rebuild]
+  trustmem learn <subcommand>     Live-learning engine
+  trustmem recall "<query>"       Search memories (with learning)
+
+Learn subcommands:
+  score, reinforce, decay, consolidate, prune, status, cycle
 
 Environment:
   TRUSTMEM_DIR, WORKSPACE, MEM_DIR
@@ -31,6 +36,12 @@ case "${cmd}" in
     ;;
   remember|forget|sync)
     exec "${TRUSTMEM_DIR}/scripts/memoryctl.sh" "${cmd}" "$@"
+    ;;
+  learn)
+    exec "${TRUSTMEM_DIR}/scripts/livelearn.sh" "$@"
+    ;;
+  recall)
+    exec "${TRUSTMEM_DIR}/scripts/livelearn.sh" recall "$@"
     ;;
   *)
     usage

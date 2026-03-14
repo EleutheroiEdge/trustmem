@@ -35,7 +35,22 @@ flowchart LR
 ./bin/trustmem remember "Important preference"
 ./bin/trustmem forget "stale item"
 ./bin/trustmem sync --rebuild
+./bin/trustmem learn cycle            # full live-learning pass
+./bin/trustmem learn status           # learning metrics
+./bin/trustmem recall "query text"    # search with learning
 ```
+
+## Live Learning
+TrustMem includes a continuous live-learning engine that improves memory quality over time:
+- **score** – assigns trust scores (0–100) to every memory entry, weighted by category.
+- **reinforce** – boosts entries that match a pattern (manual confirmation).
+- **decay** – applies time-based decay so stale, unreinforced entries fade.
+- **consolidate** – deduplicates identical entries across day files.
+- **prune** – removes entries that fall below the confidence threshold.
+- **recall** – searches memories and lightly reinforces retrieved entries.
+- **cycle** – runs score → decay → consolidate → prune in one pass.
+
+Run `trustmem learn cycle` periodically (e.g. via cron or after each sync) to keep the vault sharp.
 
 ## Security
 - Never commit `.env` or any real API keys.
@@ -69,6 +84,7 @@ Untracked: `.env`, `projects-map.yaml`, `memory/`, `vault/`, `vault-backups/`.
 - `scripts/install.sh`
 - `scripts/memoryctl.sh`
 - `scripts/vault_sync.sh`
+- `scripts/livelearn.sh`
 - `ROADMAP.md`
 - `LICENSE`
 - `SECURITY.md`

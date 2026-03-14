@@ -377,12 +377,16 @@ while IFS= read -r file; do
   done < "${file}"
 done < <(find "${MEM_DIR}" -maxdepth 1 -type f -name "*.md" | sort)
 
+project_count=0
 for slug in "${!PROJECT_FACTS[@]}"; do
   write_entity_note "projects" "${slug}" "${PROJECT_TITLES[${slug}]}" "${PROJECT_FACTS[${slug}]}" "${PROJECT_LINKS[${slug}]-}"
+  project_count=$((project_count + 1))
 done
 
+people_count=0
 for slug in "${!PERSON_FACTS[@]}"; do
   write_entity_note "people" "${slug}" "${PERSON_TITLES[${slug}]}" "${PERSON_FACTS[${slug}]}" "${PERSON_LINKS[${slug}]-}"
+  people_count=$((people_count + 1))
 done
 
 decision_count=0
@@ -398,7 +402,7 @@ for key in "${!COMMITMENTS[@]}"; do
 done
 
 echo "vault_sync: ok"
-echo "projects: ${#PROJECT_FACTS[@]}"
-echo "people: ${#PERSON_FACTS[@]}"
+echo "projects: ${project_count}"
+echo "people: ${people_count}"
 echo "decisions: ${decision_count}"
 echo "commitments: ${commitment_count}"

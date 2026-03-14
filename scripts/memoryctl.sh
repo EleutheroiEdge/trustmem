@@ -12,6 +12,7 @@ fi
 WORKSPACE="${WORKSPACE:-$WORKSPACE_DEFAULT}"
 MEM_DIR="${MEM_DIR:-${WORKSPACE}/memory}"
 VAULT_SYNC_SCRIPT="${VAULT_SYNC_SCRIPT:-${TRUSTMEM_DIR}/scripts/vault_sync.sh}"
+LIVELEARN_SCRIPT="${LIVELEARN_SCRIPT:-${TRUSTMEM_DIR}/scripts/livelearn.sh}"
 
 usage() {
   cat <<'USAGE'
@@ -37,6 +38,13 @@ run_vault_sync() {
   else
     "${VAULT_SYNC_SCRIPT}"
   fi
+}
+
+run_livelearn_score() {
+  if [[ ! -x "${LIVELEARN_SCRIPT}" ]]; then
+    chmod +x "${LIVELEARN_SCRIPT}"
+  fi
+  "${LIVELEARN_SCRIPT}" score
 }
 
 today_file() {
@@ -106,10 +114,12 @@ main() {
     remember)
       append_today_note "$*"
       run_vault_sync --rebuild
+      run_livelearn_score
       ;;
     forget)
       forget_pattern "$*"
       run_vault_sync --rebuild
+      run_livelearn_score
       ;;
     sync)
       if [[ "${1:-}" == "--rebuild" ]]; then
