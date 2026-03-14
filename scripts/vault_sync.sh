@@ -319,9 +319,6 @@ while IFS= read -r file; do
     done < <(printf '%s\n' "${line}" | rg -o '@[A-Za-z0-9_][A-Za-z0-9_-]*' || true)
 
     while IFS= read -r person; do
-      if [[ -z "${person}" ]]; then
-        continue
-      fi
       person_slug="$(canonical_person_slug "${person}")"
       if [[ -z "${person_slug}" ]]; then
         continue
@@ -426,14 +423,14 @@ done
     printf '## Decisions\n'
     for key in "${!DECISIONS[@]}"; do
       printf -- '- (%s) %s\n' "${DECISION_DATES[${key}]}" "${DECISIONS[${key}]}"
-    done
+    done | sort
     printf '\n'
   fi
   if [[ ${commitment_count} -gt 0 ]]; then
     printf '## Commitments\n'
     for key in "${!COMMITMENTS[@]}"; do
       printf -- '- (%s) %s\n' "${COMMITMENT_DATES[${key}]}" "${COMMITMENTS[${key}]}"
-    done
+    done | sort
     printf '\n'
   fi
 } > "${VAULT_DIR}/index.md.tmp"

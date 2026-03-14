@@ -103,9 +103,13 @@ recall_query() {
   fi
 
   local index="${VAULT_DIR}/index.md"
-  if [[ -f "${index}" ]] && rg -qi --fixed-strings -- "${query}" "${index}"; then
+  local index_results=""
+  if [[ -f "${index}" ]]; then
+    index_results="$(rg -i --fixed-strings -- "${query}" "${index}" 2>/dev/null || true)"
+  fi
+  if [[ -n "${index_results}" ]]; then
     echo "## Index matches"
-    rg -i --fixed-strings -- "${query}" "${index}"
+    printf '%s\n' "${index_results}"
     echo ""
   fi
 
