@@ -8,9 +8,15 @@ usage() {
   cat <<'USAGE'
 Usage:
   trustmem doctor
-  trustmem remember "<text>"
+  trustmem remember "<text>"        Pin to vault immediately
+  trustmem ingest "<text>"          Score only, promote later
   trustmem forget "<pattern>"
-  trustmem sync [--rebuild]
+  trustmem recall "<query>"         Search vault + score metadata
+  trustmem sync [--rebuild|--init-promoted]
+  trustmem learn <subcommand>       Live-learning engine
+
+Learn subcommands:
+  score, reinforce, decay, consolidate, promote, prune, status, cycle
 
 Environment:
   TRUSTMEM_DIR, WORKSPACE, MEM_DIR
@@ -29,8 +35,11 @@ case "${cmd}" in
   doctor)
     exec "${TRUSTMEM_DIR}/scripts/doctor.sh" "$@"
     ;;
-  remember|forget|sync)
+  remember|ingest|forget|recall|sync)
     exec "${TRUSTMEM_DIR}/scripts/memoryctl.sh" "${cmd}" "$@"
+    ;;
+  learn)
+    exec "${TRUSTMEM_DIR}/scripts/livelearn.sh" "$@"
     ;;
   *)
     usage
