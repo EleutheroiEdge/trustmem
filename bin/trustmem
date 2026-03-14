@@ -10,6 +10,7 @@ Usage:
   trustmem doctor
   trustmem remember "<text>"
   trustmem forget "<pattern>"
+  trustmem recall "<query>"
   trustmem sync [--rebuild]
 
 Environment:
@@ -29,7 +30,7 @@ case "${cmd}" in
   doctor)
     exec "${TRUSTMEM_DIR}/scripts/doctor.sh" "$@"
     ;;
-  remember|forget|sync)
+  remember|forget|recall|sync)
     exec "${TRUSTMEM_DIR}/scripts/memoryctl.sh" "${cmd}" "$@"
     ;;
   *)

@@ -187,7 +187,7 @@ write_entity_note() {
     links="- None"
   fi
 
-  cat > "${file}" <<EOF
+  cat > "${file}.tmp" <<EOF
 ---
 id: ${singular}-${slug}
 type: ${singular}
@@ -204,6 +204,7 @@ ${facts}
 ## Links
 ${links}
 EOF
+  mv "${file}.tmp" "${file}"
 }
 
 write_event_note() {
@@ -229,7 +230,7 @@ write_event_note() {
     links="- None"
   fi
 
-  cat > "${file}" <<EOF
+  cat > "${file}.tmp" <<EOF
 ---
 id: ${kind%?}-${short_hash}
 type: ${kind%?}
@@ -246,6 +247,7 @@ status: active
 ## Links
 ${links}
 EOF
+  mv "${file}.tmp" "${file}"
 }
 
 declare -A PROJECT_TITLES
@@ -316,18 +318,19 @@ while IFS= read -r file; do
       append_unique_line_var mentioned_people "${person_slug}"
     done < <(printf '%s\n' "${line}" | rg -o '@[A-Za-z0-9_][A-Za-z0-9_-]*' || true)
 
-    for person in Mitzseen Mitazyn Josh Sam Alex; do
-      if printf '%s\n' "${line}" | rg -qi "\\b${person}\\b"; then
-        person_slug="$(canonical_person_slug "${person}")"
-        if [[ -z "${person_slug}" ]]; then
-          continue
-        fi
-        PERSON_TITLES["${person_slug}"]="$(canonical_person_title "${person}")"
-        append_unique_assoc PERSON_FACTS "${person_slug}" "- (${date_from_file}) ${line}"
-        append_unique_line_var links "[[people/${person_slug}]]"
-        append_unique_line_var mentioned_people "${person_slug}"
+    while IFS= read -r person; do
+      if [[ -z "${person}" ]]; then
+        continue
       fi
-    done
+      person_slug="$(canonical_person_slug "${person}")"
+      if [[ -z "${person_slug}" ]]; then
+        continue
+      fi
+      PERSON_TITLES["${person_slug}"]="$(canonical_person_title "${person}")"
+      append_unique_assoc PERSON_FACTS "${person_slug}" "- (${date_from_file}) ${line}"
+      append_unique_line_var links "[[people/${person_slug}]]"
+      append_unique_line_var mentioned_people "${person_slug}"
+    done < <(printf '%s\n' "${line}" | rg -oi '\b(Mitzseen|Mitazyn|Josh|Sam|Alex)\b' || true)
 
     if printf '%s\n' "${links}" | rg -q .; then
       while IFS= read -r proj; do
@@ -377,12 +380,16 @@ while IFS= read -r file; do
   done < "${file}"
 done < <(find "${MEM_DIR}" -maxdepth 1 -type f -name "*.md" | sort)
 
+project_count=0
 for slug in "${!PROJECT_FACTS[@]}"; do
   write_entity_note "projects" "${slug}" "${PROJECT_TITLES[${slug}]}" "${PROJECT_FACTS[${slug}]}" "${PROJECT_LINKS[${slug}]-}"
+  project_count=$((project_count + 1))
 done
 
+person_count=0
 for slug in "${!PERSON_FACTS[@]}"; do
   write_entity_note "people" "${slug}" "${PERSON_TITLES[${slug}]}" "${PERSON_FACTS[${slug}]}" "${PERSON_LINKS[${slug}]-}"
+  person_count=$((person_count + 1))
 done
 
 decision_count=0
@@ -397,8 +404,43 @@ for key in "${!COMMITMENTS[@]}"; do
   commitment_count=$((commitment_count + 1))
 done
 
+# Generate vault index for fast recall
+{
+  printf '# Vault Index\n\n'
+  printf 'Updated: %s\n\n' "$(date +%F)"
+  if [[ ${project_count} -gt 0 ]]; then
+    printf '## Projects\n'
+    for slug in "${!PROJECT_FACTS[@]}"; do
+      printf -- '- [[projects/%s]] — %s\n' "${slug}" "${PROJECT_TITLES[${slug}]}"
+    done
+    printf '\n'
+  fi
+  if [[ ${person_count} -gt 0 ]]; then
+    printf '## People\n'
+    for slug in "${!PERSON_FACTS[@]}"; do
+      printf -- '- [[people/%s]] — %s\n' "${slug}" "${PERSON_TITLES[${slug}]}"
+    done
+    printf '\n'
+  fi
+  if [[ ${decision_count} -gt 0 ]]; then
+    printf '## Decisions\n'
+    for key in "${!DECISIONS[@]}"; do
+      printf -- '- (%s) %s\n' "${DECISION_DATES[${key}]}" "${DECISIONS[${key}]}"
+    done
+    printf '\n'
+  fi
+  if [[ ${commitment_count} -gt 0 ]]; then
+    printf '## Commitments\n'
+    for key in "${!COMMITMENTS[@]}"; do
+      printf -- '- (%s) %s\n' "${COMMITMENT_DATES[${key}]}" "${COMMITMENTS[${key}]}"
+    done
+    printf '\n'
+  fi
+} > "${VAULT_DIR}/index.md.tmp"
+mv "${VAULT_DIR}/index.md.tmp" "${VAULT_DIR}/index.md"
+
 echo "vault_sync: ok"
-echo "projects: ${#PROJECT_FACTS[@]}"
-echo "people: ${#PERSON_FACTS[@]}"
+echo "projects: ${project_count}"
+echo "people: ${person_count}"
 echo "decisions: ${decision_count}"
 echo "commitments: ${commitment_count}"

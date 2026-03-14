@@ -11,6 +11,7 @@ else
 fi
 WORKSPACE="${WORKSPACE:-$WORKSPACE_DEFAULT}"
 MEM_DIR="${MEM_DIR:-${WORKSPACE}/memory}"
+VAULT_DIR="${VAULT_DIR:-${TRUSTMEM_DIR}/vault}"
 VAULT_SYNC_SCRIPT="${VAULT_SYNC_SCRIPT:-${TRUSTMEM_DIR}/scripts/vault_sync.sh}"
 
 usage() {
@@ -18,6 +19,7 @@ usage() {
 Usage:
   memoryctl.sh remember "<text>"
   memoryctl.sh forget "<pattern>"
+  memoryctl.sh recall "<query>"
   memoryctl.sh sync [--rebuild]
 USAGE
 }
@@ -92,6 +94,34 @@ forget_pattern() {
   echo "files_changed: ${removed}"
 }
 
+recall_query() {
+  local query="$1"
+  if [[ ! -d "${VAULT_DIR}" ]]; then
+    echo "recall: vault directory not found at ${VAULT_DIR}" >&2
+    echo "Run 'trustmem sync' first." >&2
+    return 1
+  fi
+
+  local index="${VAULT_DIR}/index.md"
+  if [[ -f "${index}" ]] && rg -qi --fixed-strings -- "${query}" "${index}"; then
+    echo "## Index matches"
+    rg -i --fixed-strings -- "${query}" "${index}"
+    echo ""
+  fi
+
+  echo "## Vault matches"
+  local vault_hits=0
+  while IFS= read -r match; do
+    local rel="${match#"${VAULT_DIR}"/}"
+    echo "--- ${rel} ---"
+    rg -i -C 1 --fixed-strings -- "${query}" "${match}"
+    echo ""
+    vault_hits=$((vault_hits + 1))
+  done < <(rg -il --fixed-strings -- "${query}" "${VAULT_DIR}" 2>/dev/null || true)
+
+  echo "recall: ${vault_hits} file(s) matched"
+}
+
 main() {
   if [[ $# -lt 1 ]]; then
     usage
@@ -105,11 +135,14 @@ main() {
   case "${cmd}" in
     remember)
       append_today_note "$*"
-      run_vault_sync --rebuild
+      run_vault_sync
       ;;
     forget)
       forget_pattern "$*"
       run_vault_sync --rebuild
+      ;;
+    recall)
+      recall_query "$*"
       ;;
     sync)
       if [[ "${1:-}" == "--rebuild" ]]; then
