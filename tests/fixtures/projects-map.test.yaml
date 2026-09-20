@@ -1,0 +1,25 @@
+# Synthetic scope map used only by tests/test_trustmem.sh.
+# Every name here is invented; nothing corresponds to a real project or person.
+
+version: 1
+updated_at: 2026-01-01
+owner: TEST_OWNER
+
+projects:
+  widget-factory:
+    name: Widget Factory
+    aliases:
+      - widget factory
+      - widgetfactory
+
+people:
+  ada-fixture:
+    name: Ada Fixture
+    aliases:
+      - ada fixture
+      - adafix
+
+# "widget" looks like a handle but names a product, so it must never become a
+# person note even when written as @widget.
+people_exclude:
+  - widget
