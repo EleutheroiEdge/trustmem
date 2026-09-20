@@ -6,7 +6,7 @@
         "sources": ["memory"],
         "extraPaths": [
           "/ABS/PATH/TO/trustmem/vault",
-          "/ABS/PATH/TO/trustmem/policies/clawbot-memory-policy.yaml",
+          "/ABS/PATH/TO/trustmem/policies/example-memory-policy.yaml",
           "/ABS/PATH/TO/trustmem/projects-map.yaml"
         ],
         "provider": "openai",
