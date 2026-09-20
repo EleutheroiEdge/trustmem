@@ -48,7 +48,7 @@ was deliberately **not** ported and what remains deferred, is in
   `--confirm` / `--category` / `--ambiguous` intake options.
 - `doctor` checks the active policy, the scope map, scores integrity, vault
   health and the promotion manifest.
-- `tests/test_trustmem.sh` (140 assertions) and `tests/test_memory_policy.py`
+- `tests/test_trustmem.sh` (165 assertions) and `tests/test_memory_policy.py`
   (52 assertions); CI runs both plus shellcheck on Ubuntu and macOS.
 - `docs/CANONICALIZATION.md`.
 
@@ -81,6 +81,23 @@ was deliberately **not** ported and what remains deferred, is in
   day-file content into rollups is a different, consumer-side operation and is
   not implemented here. Whether the engine should own it is recorded as an open
   question in `docs/CANONICALIZATION.md`.
+- **The day-file invariant, stated precisely.** Day-files are **append-only in the
+  normal lifecycle** — no learning operation rewrites them — and explicit `forget`
+  is the **privacy/deletion exception** that may remove matching entries. Earlier
+  wording called day-files an "immutable audit trail", which contradicted
+  `forget`; the behaviour was right, the wording was not.
+
+### Fixed
+- `forget` left recoverable copies behind in TrustMem-managed artifacts: the text snippet
+  that `.access_log` stores for each reinforce/promote/prune event, and generated notes
+  inside vault backups written by *earlier* rebuilds. `forget` now cleans every derived
+  artifact by the **exact stable memory id** of the forgotten entries (including ids
+  derived for legacy rows), never by text, so overlapping memories are untouched
+  (`test_forget_leaves_no_recoverable_copy`,
+  `test_forget_is_precise_for_overlapping_memories`). `.scores` / `.promoted` rows are now
+  matched on the id field exactly. The guarantee is scoped: no recoverable copy remains in TrustMem-managed current, generated and backup artifacts covered by the deletion contract;
+  external snapshots, OS/third-party backups and Git history are outside it.
+  `test_lifecycle_never_rewrites_dayfiles` pins the other half of the invariant.
 
 ## [0.1.0] — 2026-02-15
 

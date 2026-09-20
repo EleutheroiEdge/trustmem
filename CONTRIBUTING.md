@@ -41,8 +41,15 @@ specific to one deployment belongs in that deployment's configuration, not here.
 - Intake is fail-closed. Any new write path must go through the shared
   classifier in `scripts/memory_policy.py` before touching a file.
 - The classifier must never print or persist the submitted text.
-- Day-files are an immutable audit trail. `learn prune` is score-based and must
-  not modify them. If you add a command that rewrites day-files, give it a
+- **Day-file invariant.** Normal lifecycle: day-files are append-only — no
+  learning operation (`score`, `reinforce`, `decay`, `consolidate`, `promote`,
+  `prune`, `cycle`) may rewrite one. The single exception is explicit `forget`,
+  the privacy/deletion path: it may remove matching day-file entries and must
+  leave **no recoverable copy in TrustMem-managed current, generated and backup
+  artifacts** (scores, promotion manifest, access log, generated vault, index, earlier
+  vault backups). Derived artifacts are cleaned by **exact memory id, never by text
+  matching**; unrelated rows and files must survive. Do not weaken `forget` to preserve
+  history. If you add any *other* command that rewrites day-files, give it a
   different name and say so in `docs/CANONICALIZATION.md`.
 - Any deletion must propagate: day-file, `.scores`, `.promoted`, generated vault
   notes and `vault/index.md`, with no backup copy left behind.

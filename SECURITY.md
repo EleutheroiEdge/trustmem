@@ -37,8 +37,21 @@ memory ids from the day-files (forget only), `.scores`, `.promoted`, every
 generated vault note that references them, and `vault/index.md`, then rebuild the
 vault **without** archiving a backup copy of the removed content.
 
-Note the boundary: score-based `prune` never modifies day-files, which are an
-immutable audit trail. `forget` is the command that removes source content.
+Note the boundary. In the normal lifecycle day-files are **append-only**: scoring,
+reinforcement, decay, consolidation, promotion and score-based `prune` never
+rewrite them. **Explicit `forget` is the privacy/deletion exception**: it removes
+the matching source entries from day-files and then cleans every derived artifact by the
+**exact stable memory id** of those entries - `.scores`, `.promoted`, `.access_log` (which
+stores a snippet per learning event), the generated vault and its index, and generated
+notes inside vault backups written by *earlier* rebuilds. Cleanup never matches on text,
+so a memory whose wording merely overlaps is not affected.
+
+**What is guaranteed:** after `forget`, no recoverable copy remains in TrustMem-managed current, generated and backup artifacts covered by the deletion contract.
+**What is not:** TrustMem cannot and does not claim that no copy exists anywhere on the
+machine. Filesystem snapshots, OS or third-party backups, Git history of a private vault,
+and search indexes built by other tools are outside the guarantee and remain your
+responsibility. Day-files are therefore an append-only record, **not** an immutable one -
+privacy deletion outranks literal history.
 
 ## Scope Notes
 

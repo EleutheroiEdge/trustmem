@@ -23,12 +23,13 @@
 
 ## Open questions
 
-- **Should the engine own retention-based archival?** Today `learn prune` is
-  purely score-based and day-files are an immutable audit trail. A
-  retention-based prune that archives aged day-file entries into rollups is a
-  different operation, currently left to consumers. Adopting it (as, say,
-  `learn archive`) requires deciding whether the engine may ever rewrite a
-  day-file. See `docs/CANONICALIZATION.md`.
+- **Retention archival: deferred for 0.3.0 (decided).** The lifecycle stays:
+  `remember` / `ingest` append to the day-file; `score`, `reinforce`, `decay`,
+  `consolidate`, `promote` and `prune` never rewrite day-files; explicit `forget` is
+  the privacy-deletion exception and propagates through all TrustMem-managed derived
+  artifacts. If retention archival is added later it will be an **explicit, separate
+  operation** (for example `trustmem archive`). **`prune` will not be given a second,
+  destructive meaning.** See `docs/CANONICALIZATION.md`.
 - Supersession / contradiction detection: `consolidate` deduplicates identical
   snippets but does not know that a newer memory replaces an older one.
 - Whether ambiguous content should be parked in a reviewable queue rather than

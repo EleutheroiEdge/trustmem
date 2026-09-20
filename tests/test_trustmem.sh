@@ -256,6 +256,109 @@ test_forget() {
   assert_not_contains "forgotten mid removed from scores" "Forget this note" "${scores_content}"
 }
 
+# Explicit forget is the privacy/deletion EXCEPTION to the append-only lifecycle: it may rewrite day-files, and afterwards
+# no recoverable copy may remain in TrustMem-managed current/generated/backup artifacts. Cleanup is keyed on the exact
+# memory id, so the fixtures below mirror what the engine really writes (ids in rows and in note front matter).
+_mid_of() { extract_mid "$(grep -F -- "$1" "${MEM_DIR}/$(date +%Y-%m-%d).md" | head -n 1)"; }
+
+test_forget_leaves_no_recoverable_copy() {
+  echo "=== test_forget_leaves_no_recoverable_copy ==="
+  setup
+  "${BIN}" remember "Keep this synthetic note" >/dev/null 2>&1
+  "${BIN}" remember "Erase this synthetic zebra-plan note" >/dev/null 2>&1
+  "${BIN}" learn score >/dev/null 2>&1
+
+  local today mid keep_mid
+  today="$(date +%Y-%m-%d)"
+  mid="$(_mid_of 'Erase this synthetic')"
+  keep_mid="$(_mid_of 'Keep this synthetic')"
+  assert_eq "fixture has a memory id" "16" "${#mid}"
+
+  # access-log rows as written by reinforce/promote/prune (epoch, action, MID, snippet)
+  printf '%s\t%s\t%s\t%s\n' "1700000000" "reinforce" "${mid}" "Erase this synthetic zebra-plan note" >> "${MEM_DIR}/.access_log"
+  printf '%s\t%s\t%s\t%s\n' "1700000001" "reinforce" "${keep_mid}" "Keep this synthetic note" >> "${MEM_DIR}/.access_log"
+  # a vault backup from an EARLIER rebuild: generated notes reference their sources in front matter
+  local snap="${BACKUP_DIR}/vault-20000101-000000"
+  mkdir -p "${snap}/decisions"
+  printf '%s\n' '---' "memory_id: ${mid}" '---' '- Erase this synthetic zebra-plan note' > "${snap}/decisions/erase.md"
+  printf '%s\n' '---' "memory_id: ${keep_mid}" '---' '- Keep this synthetic note' > "${snap}/decisions/keep.md"
+  printf '%s\n' '- decisions/erase: Erase this synthetic zebra-plan note' '- decisions/keep: Keep this synthetic note' > "${snap}/index.md"
+
+  "${BIN}" forget "zebra-plan" >/dev/null 2>&1
+
+  local everything
+  everything="$(find "${MEM_DIR}" "${VAULT_DIR}" "${BACKUP_DIR}" -type f -exec cat {} + 2>/dev/null)"
+  assert_not_contains "forgotten text remains in no TrustMem-managed artifact" "zebra-plan" "${everything}"
+  assert_not_contains "forgotten memory id remains in no TrustMem-managed artifact" "${mid}" "${everything}"
+  assert_contains "unrelated day-file entry survives" "Keep this synthetic note" "$(cat "${MEM_DIR}/${today}.md")"
+  assert_contains "unrelated access-log row survives" "${keep_mid}" "$(cat "${MEM_DIR}/.access_log")"
+  assert_contains "unrelated backup note survives untouched" "Keep this synthetic note" "$(cat "${snap}/decisions/keep.md")"
+  assert_file_absent "backup note of the forgotten id removed" "${snap}/decisions/erase.md"
+  assert_file_absent "stale backup index removed" "${snap}/index.md"
+  local newest_backup
+  newest_backup="$(find "${BACKUP_DIR}" -mindepth 1 -maxdepth 1 -type d | sort | tail -n 1)"
+  assert_eq "forget itself wrote no new backup" "${snap}" "${newest_backup}"
+}
+
+# REGRESSION: cleanup must be keyed on the exact memory id. A memory whose TEXT merely overlaps with the forgotten one
+# (it even contains the forget pattern inside derived artifacts of a DIFFERENT id) must survive everywhere.
+test_forget_is_precise_for_overlapping_memories() {
+  echo "=== test_forget_is_precise_for_overlapping_memories ==="
+  setup
+  "${BIN}" remember "Project Orchid budget" >/dev/null 2>&1
+  "${BIN}" remember "Project Orchid budget review notes" >/dev/null 2>&1
+  "${BIN}" learn score >/dev/null 2>&1
+
+  local today short_mid long_mid
+  today="$(date +%Y-%m-%d)"
+  short_mid="$(extract_mid "$(grep -F -- 'Project Orchid budget' "${MEM_DIR}/${today}.md" | grep -v -F 'review' | head -n 1)")"
+  long_mid="$(_mid_of 'Project Orchid budget review notes')"
+  assert_eq "two distinct ids" "yes" "$([[ -n "${short_mid}" && -n "${long_mid}" && "${short_mid}" != "${long_mid}" ]] && echo yes || echo no)"
+
+  # Derived artifacts of the SURVIVING memory deliberately contain the forget pattern as text.
+  printf '%s\t%s\t%s\t%s\n' "1700000002" "reinforce" "${short_mid}" "compare with Project Orchid budget review notes" >> "${MEM_DIR}/.access_log"
+  printf '%s\t%s\t%s\t%s\n' "1700000003" "reinforce" "${long_mid}" "Project Orchid budget review notes" >> "${MEM_DIR}/.access_log"
+  local snap="${BACKUP_DIR}/vault-20000102-000000"
+  mkdir -p "${snap}/decisions"
+  printf '%s\n' '---' "memory_id: ${short_mid}" '---' '- Project Orchid budget (see also: Project Orchid budget review notes)' > "${snap}/decisions/short.md"
+  printf '%s\n' '---' "memory_id: ${long_mid}" '---' '- Project Orchid budget review notes' > "${snap}/decisions/long.md"
+
+  "${BIN}" forget "Project Orchid budget review notes" >/dev/null 2>&1
+
+  local day scores log
+  day="$(cat "${MEM_DIR}/${today}.md")"
+  scores="$(cat "${MEM_DIR}/.scores")"
+  log="$(cat "${MEM_DIR}/.access_log")"
+  assert_contains "overlapping shorter memory survives in the day-file" "Project Orchid budget" "${day}"
+  assert_not_contains "forgotten longer memory left the day-file" "review notes" "${day}"
+  assert_contains "surviving id keeps its score row" "${short_mid}" "${scores}"
+  assert_not_contains "forgotten id left the scores" "${long_mid}" "${scores}"
+  assert_contains "surviving id keeps its access-log row even though its snippet contains the pattern" "${short_mid}" "${log}"
+  assert_not_contains "forgotten id left the access log" "${long_mid}" "${log}"
+  assert_contains "backup note of the surviving id is untouched although it contains the pattern text" "see also" "$(cat "${snap}/decisions/short.md")"
+  assert_file_absent "backup note of the forgotten id removed" "${snap}/decisions/long.md"
+}
+
+# Normal lifecycle: day-files are append-only. None of the learning operations may rewrite them.
+test_lifecycle_never_rewrites_dayfiles() {
+  echo "=== test_lifecycle_never_rewrites_dayfiles ==="
+  setup
+  "${BIN}" remember "Lifecycle synthetic note one" >/dev/null 2>&1
+  "${BIN}" remember "Lifecycle synthetic note two" >/dev/null 2>&1
+  local today before after op
+  today="$(date +%Y-%m-%d)"
+  before="$(cksum < "${MEM_DIR}/${today}.md")"
+  for op in score reinforce decay consolidate promote prune cycle; do
+    if [[ "${op}" == "reinforce" ]]; then
+      "${BIN}" learn reinforce "Lifecycle synthetic" >/dev/null 2>&1 || true
+    else
+      "${BIN}" learn "${op}" >/dev/null 2>&1 || true
+    fi
+    after="$(cksum < "${MEM_DIR}/${today}.md")"
+    assert_eq "learn ${op} does not rewrite the day-file" "${before}" "${after}"
+  done
+}
+
 test_recall_vault() {
   echo "=== test_recall_vault ==="
   setup
@@ -857,6 +960,9 @@ test_full_transcript_block
 test_policy_profile_is_configurable
 test_ingest
 test_forget
+test_forget_leaves_no_recoverable_copy
+test_forget_is_precise_for_overlapping_memories
+test_lifecycle_never_rewrites_dayfiles
 test_recall_vault
 test_recall_dayfile_fallback
 test_score

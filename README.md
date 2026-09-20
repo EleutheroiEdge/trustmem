@@ -67,9 +67,24 @@ through a scoring layer before promotion to the canonical vault:
 - **recall** — searches the vault first, enriched with score metadata, and falls
   back to day-files.
 
-**Day-files are an immutable audit trail.** `learn prune` is score-based: it
-removes below-threshold entries from the scoring table, the promotion manifest
-and the generated vault, and never edits a day-file. A retention-based prune that
+### The day-file invariant
+
+- **Normal lifecycle: day-files are append-only.** `remember` / `ingest` only
+  append. `learn score`, `reinforce`, `decay`, `consolidate`, `promote`, `prune`
+  and `cycle` **never rewrite a day-file** (asserted by
+  `test_lifecycle_never_rewrites_dayfiles`).
+- **Explicit `forget` is the privacy/deletion exception.** Your pattern selects day-file
+  entries; everything derived from them is then removed by their **exact stable memory
+  id** (never by text, so a memory with merely overlapping wording is untouched): the
+  scoring table, the promotion manifest, the access log, the generated vault and its
+  index, and vault backups written by earlier rebuilds. Afterwards no recoverable copy remains in TrustMem-managed current, generated and backup artifacts covered by the deletion contract
+  (`test_forget_leaves_no_recoverable_copy`,
+  `test_forget_is_precise_for_overlapping_memories`). Filesystem snapshots, OS or
+  third-party backups, Git history and indexes built by other tools are **outside**
+  that guarantee. Privacy deletion outranks literal append-only history.
+
+`learn prune` is score-based: it removes below-threshold entries from the scoring
+table, the promotion manifest and the generated vault, and never edits a day-file. A retention-based prune that
 archives aged day-file content is a different operation and is not implemented
 here — the distinction is deliberate and documented in
 [`docs/CANONICALIZATION.md`](docs/CANONICALIZATION.md).

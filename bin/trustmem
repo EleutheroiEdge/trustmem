@@ -29,7 +29,10 @@ Learn subcommands:
 
   'prune' (alias 'prune-scores') is SCORE-BASED: it drops below-threshold
   entries from the scoring table, the promotion manifest and the generated
-  vault. Day-files are an immutable audit trail and are never touched.
+  vault. Learning operations never rewrite day-files (append-only lifecycle).
+  The only command that may remove day-file entries is 'forget' - the explicit
+  privacy/deletion path. It cleans all TrustMem-managed artifacts by exact
+  memory id; external backups and snapshots are outside its reach.
   Retention-based archival of day-files is a DIFFERENT operation and is not
   implemented by this engine (see docs/CANONICALIZATION.md).
 

@@ -37,7 +37,7 @@ and the deployment-specific parts live in a consumer's own configuration.
 | **Policy file** | `<project>-memory-policy.yaml` with `project: <project>`, referenced by name from the scripts and the OpenClaw example | yes | **yes — `policies/example-memory-policy.yaml`, selected by `POLICY_FILE` or `TRUSTMEM_POLICY_PROFILE`; other profiles are git-ignored** | `test_policy_profile_is_configurable`, `test_repository_is_generic`, `test_block_patterns_come_from_the_active_policy` | — |
 | **Doctor health checks** — scores, vault, promoted manifest | binaries, example files, repo secret scan, embedding guardrail | yes | yes — added policy and scope-map checks; `OPENCLAW_CONFIG` overridable | `test_doctor` | — |
 | **Audit trail** — `.access_log` for reinforce / promote / prune | absent | yes | already generic | `test_reinforce` (log written) | `remember` / `ingest` / `forget` writes and `recall` reads are still not logged (same gap as downstream) |
-| **Test suite** — ~65 assertions | none | yes | yes — genericized fixtures, plus new scoping/policy/prune coverage → **140 assertions** | itself | — |
+| **Test suite** — ~65 assertions | none | yes | yes — genericized fixtures, plus new scoping/policy/prune coverage → **165 assertions** | itself | — |
 | **CI** — doctor + test + shellcheck on Ubuntu and macOS | doctor + shellcheck only | yes | yes — adds a pytest job and lints `tests/*.sh` | itself | — |
 | **Embeddings / vector index** | documented, no implementation | n/a — nothing to port | n/a | n/a | still unimplemented in the engine; hosts index the vault themselves (ROADMAP) |
 | Domain-specific capture (a consumer's own categories, instruments, holdings and risk-state hooks) | absent | **no — deliberately not ported** | n/a | n/a | belongs in a private consumer, not in a generic memory engine |
@@ -54,18 +54,22 @@ been dishonest to paper over it by merging them.
 | **Score-based prune** (this engine: `trustmem learn prune`, alias `prune-scores`) | removes entries whose trust score fell below `PRUNE_THRESHOLD` | `.scores`, `.promoted`, generated vault notes and `index.md`. **Day-files are never modified** |
 | **Retention-based archival prune** (a consumer-side operation; not implemented here) | moves day-file entries older than the policy's `retention:` days into archive rollups | rewrites and can delete day-files |
 
-The engine's position: **day-files are an immutable audit trail**. Anything that
-rewrites them is a lifecycle policy decision belonging to the consumer that owns
-the data, not to the engine. So 0.3.0 implements only the score-based meaning,
+The engine's position: **in the normal lifecycle day-files are append-only**
+(no learning operation rewrites them), with exactly one exception — **explicit
+`forget`, the privacy/deletion path**, which may remove matching entries from
+day-files and must leave no recoverable copy in TrustMem-managed artifacts (scores, promotion manifest, access
+log, generated vault, index, earlier vault backups - all cleaned by exact memory id; external
+snapshots, OS backups and Git history are outside the guarantee). Any *other* rewriting of
+day-files, such as age-based archival, is a lifecycle policy decision belonging
+to the consumer that owns the data, not to the engine. So 0.3.0 implements only the score-based meaning,
 says so in `--help`, and prints `prune_mode: score-threshold` and
 `day_files_modified: 0` so a caller can never be in doubt about which one ran.
 `test_prune` asserts the day-file entry survives.
 
-**Open question, deferred:** should the engine also own retention-based archival
-(say as `trustmem learn archive`), so that both halves of the lifecycle live in
-one place and a consumer does not reimplement it? That needs a decision on
-whether an engine may ever rewrite a day-file. Until it is answered, the two
-meanings stay separate and separately named.
+**Decision for 0.3.0: retention archival is deferred.** If it is added later it will be an
+explicit, separate operation (for example `trustmem archive`) with its own name, help text and
+tests. `prune` keeps exactly one meaning - score-based, never touching day-files - and will not
+be given a second, destructive one.
 
 ## Other intentionally deferred items
 

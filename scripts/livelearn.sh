@@ -36,8 +36,9 @@ Usage:
 Prune semantics (see docs/CANONICALIZATION.md):
   This engine implements exactly ONE prune, and it is score-based: entries whose
   score has fallen below PRUNE_THRESHOLD are removed from .scores, from the
-  .promoted manifest and from the generated vault. Day-files are an immutable
-  audit trail and are never modified. A retention-based prune that archives aged
+  .promoted manifest and from the generated vault. No learning operation rewrites
+  a day-file (append-only lifecycle; only the explicit 'forget' privacy path may
+  remove day-file entries). A retention-based prune that archives aged
   day-file content into rollups is a DIFFERENT operation; it is not implemented
   here, and the two meanings are deliberately not merged.
 

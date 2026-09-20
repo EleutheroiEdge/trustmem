@@ -36,20 +36,61 @@ add_to_promoted() {
   printf '%s\t%s\t%s\n' "${mid}" "${source_file}" "${ts}" >> "${PROMOTED_FILE}"
 }
 
-remove_from_promoted() {
-  local pattern="$1"
-  if [[ ! -f "${PROMOTED_FILE}" ]]; then return; fi
-  local tmp="${PROMOTED_FILE}.tmp"
-  rg -v --fixed-strings -- "${pattern}" "${PROMOTED_FILE}" > "${tmp}" 2>/dev/null || true
-  mv "${tmp}" "${PROMOTED_FILE}"
+# Explicit forget is the privacy/deletion exception to the append-only lifecycle.
+#
+# TARGETING: the owner's pattern selects day-file ENTRIES (that is the command's input). Everything derived from those
+# entries is then cleaned by their EXACT stable memory id - never by text - so a memory whose wording merely overlaps with
+# the forgotten one is not touched anywhere.
+#
+# SCOPE OF THE GUARANTEE: after forget, no recoverable copy remains in TrustMem-managed current, generated and backup
+# artifacts covered by this deletion contract (day-files, .scores, .promoted, .access_log, the generated vault and its
+# index, and vault backups under BACKUP_DIR). Filesystem snapshots, OS or third-party backups, Git history and indexes
+# built by other tools are outside it.
+
+# Drop rows whose FIRST tab-separated field is exactly one of the given memory ids (.scores, .promoted).
+remove_rows_by_mid() {
+  local file="$1" mids="$2" field="${3:-1}"
+  [[ -f "${file}" ]] || return 0
+  local tmp="${file}.tmp"
+  awk -F'\t' -v mids="${mids}" -v f="${field}" '
+    BEGIN { n = split(mids, m, "\n"); for (i = 1; i <= n; i++) if (m[i] != "") drop[m[i]] = 1 }
+    !($f in drop) { print }' "${file}" > "${tmp}"
+  mv "${tmp}" "${file}"
 }
 
-remove_from_scores() {
-  local pattern="$1"
-  if [[ ! -f "${SCORES_FILE}" ]]; then return; fi
-  local tmp="${SCORES_FILE}.tmp"
-  rg -v --fixed-strings -- "${pattern}" "${SCORES_FILE}" > "${tmp}" 2>/dev/null || true
-  mv "${tmp}" "${SCORES_FILE}"
+# Vault backups written by EARLIER rebuilds. Generated notes carry their source ids in front matter (memory_id /
+# memory_ids) but their fact lines do not, and a note may aggregate several memories - so, exactly like
+# scrub_vault_memory_ids does for the live vault, the whole generated note that references a forgotten id is removed,
+# together with that backup's index.md (an index-only stale copy must not survive). Notes that do not reference a
+# forgotten id are left untouched. Backups are derived artifacts; the surviving memories still live in the day-files.
+purge_vault_backup_mids() {
+  local mids="$1"
+  local backup_dir="${BACKUP_DIR:-${TRUSTMEM_DIR}/vault-backups}"
+  if [[ ! -d "${backup_dir}" ]]; then return 0; fi
+  if [[ -z "${backup_dir}" || "${backup_dir}" == "/" || "${backup_dir}" == "${TRUSTMEM_DIR}" || "${backup_dir}" == "${WORKSPACE}" || -L "${backup_dir}" ]]; then
+    echo "trustmem: refusing unsafe backup scrub target: ${backup_dir}" >&2
+    return 2
+  fi
+  local mid file rel snapshot
+  while IFS= read -r mid; do
+    if [[ -z "${mid}" ]]; then continue; fi
+    while IFS= read -r -d '' file; do
+      rel="${file#"${backup_dir}"/}"
+      snapshot="${backup_dir}/${rel%%/*}"
+      unlink "${file}"
+      if [[ -f "${snapshot}/index.md" ]]; then unlink "${snapshot}/index.md"; fi
+    done < <(rg -l -0 --fixed-strings -- "${mid}" "${backup_dir}" 2>/dev/null || true)
+  done <<< "${mids}"
+}
+
+purge_derived_artifacts_by_mid() {
+  local mids="$1"
+  if [[ -z "${mids}" ]]; then return 0; fi
+  remove_rows_by_mid "${SCORES_FILE}" "${mids}" 1
+  remove_rows_by_mid "${PROMOTED_FILE}" "${mids}" 1
+  remove_rows_by_mid "${MEM_DIR}/.access_log" "${mids}" 3     # epoch, action, MID, snippet
+  scrub_vault_memory_ids "${mids}"
+  purge_vault_backup_mids "${mids}"
 }
 
 run_livelearn_score() {
@@ -142,6 +183,10 @@ forget_pattern() {
       while IFS= read -r matched_line; do
         local mid
         mid="$(extract_mid "${matched_line}")"
+        if [[ -z "${mid}" ]]; then
+          # legacy rows without an explicit id: vault_sync derives the id from the cleaned content - use the same id
+          mid="$(derive_mid_from_content "$(clean_line "$(strip_mid "${matched_line}")")")"
+        fi
         if [[ -n "${mid}" ]]; then
           forgotten_mids="${forgotten_mids}${mid}"$'\n'
         fi
@@ -152,15 +197,7 @@ forget_pattern() {
     fi
   done < <(find "${MEM_DIR}" -maxdepth 1 -type f -name "*.md" -print0)
 
-  if [[ -n "${forgotten_mids}" ]]; then
-    while IFS= read -r mid; do
-      if [[ -n "${mid}" ]]; then
-        remove_from_promoted "${mid}"
-        remove_from_scores "${mid}"
-      fi
-    done <<< "${forgotten_mids}"
-    scrub_vault_memory_ids "${forgotten_mids}"
-  fi
+  purge_derived_artifacts_by_mid "${forgotten_mids}"
 
   echo "forgotten_pattern: ${pattern}"
   echo "files_changed: ${removed}"
