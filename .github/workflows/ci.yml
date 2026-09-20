@@ -62,14 +62,20 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y ripgrep
 
+      # The engine requires bash >= 4 (associative arrays, ${var,,}). macOS ships bash 3.2 as /bin/bash,
+      # so the functional suite runs under Homebrew bash there - the same requirement a macOS user has.
       - name: Install deps (macOS)
         if: runner.os == 'macOS'
         run: |
           brew update
-          brew install ripgrep
+          brew install ripgrep bash
+          echo "$(brew --prefix)/bin" >> "$GITHUB_PATH"
 
       - name: Bootstrap
         run: ./scripts/install.sh
+
+      - name: Show bash version
+        run: bash --version | head -1
 
       - name: Run functional tests
         run: bash tests/test_trustmem.sh

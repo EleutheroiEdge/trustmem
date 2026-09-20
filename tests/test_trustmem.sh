@@ -831,7 +831,7 @@ test_repository_is_generic() {
   # Only the generic example profile may be shipped: a downstream profile must
   # never be committed, and nothing in the tree may point at one by name.
   local policies
-  policies="$(cd "${TRUSTMEM_DIR}/policies" && ls -1 ./*.yaml | sed 's|^\./||' | sort | tr '\n' ' ')"
+  policies="$(find "${TRUSTMEM_DIR}/policies" -maxdepth 1 -type f -name '*.yaml' -exec basename {} \; | sort | tr '\n' ' ')"
   assert_eq "policies/ ships only the example profile" "example-memory-policy.yaml " "${policies}"
 
   local stray
