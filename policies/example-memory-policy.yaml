@@ -1,0 +1,65 @@
+# Example TrustMem memory policy (generic, safe to publish).
+#
+# This file is the DEFAULT policy profile shipped with the engine. It is read
+# and ENFORCED at intake by scripts/memory_policy.py — it is not documentation.
+#
+# A private consumer supplies its own profile instead of editing this one:
+#
+#   cp policies/example-memory-policy.yaml policies/myprofile-memory-policy.yaml
+#   export TRUSTMEM_POLICY_PROFILE=myprofile      # -> policies/myprofile-memory-policy.yaml
+#   # or point at an arbitrary path:
+#   export POLICY_FILE=/etc/trustmem/company-memory-policy.yaml
+#
+# Non-example profiles are git-ignored so a downstream profile cannot be
+# committed into a public fork by accident.
+#
+# Structure is load-bearing: block_patterns / never_store must stay at two
+# spaces of indentation with four-space list items, and the confirmation
+# controls at four spaces. The parser is deliberately stdlib-only.
+
+project: example-project
+mode: auto_distilled
+archive: false
+scope:
+  project_id: example-project
+  role_default: dev
+  privacy_mode: high
+retention:
+  summaries_days: 30
+  todos_days: 90
+  decisions_days: 365
+  preferences_days: 3650
+filters:
+  store_categories:
+    - decisions
+    - preferences
+    - constraints
+    - todos
+  block_patterns:
+    - "BEGIN PRIVATE KEY"
+    - "sk-"
+    - "AKIA"
+    - "xoxb-"
+    - "ghp_"
+  never_store:
+    - raw_credentials
+    - full_transcripts
+    - private_personal_data
+controls:
+  confirmation:
+    sensitive: always_ask
+    ambiguous: review_queue
+  commands:
+    remember: "/remember <text>"
+    forget: "/forget <selector>"
+    memory_off: "/memory off"
+    memory_export: "/memory export"
+
+embeddings:
+  default_provider: local
+  nvidia_dual_mode_required: true
+  nvidia_note: >
+    nv-embedqa-e5-v5 requires index/query split:
+    nvidia/nv-embedqa-e5-v5-passage for indexing and
+    nvidia/nv-embedqa-e5-v5-query for searching.
+    Single-model embedding integrations should warn or fail fast.
