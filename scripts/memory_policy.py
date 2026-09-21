@@ -47,6 +47,13 @@ _CREDENTIAL_PATTERNS = (
         re.IGNORECASE,
     ),
     re.compile(r"\bauthorization\s*:\s*bearer\s+\S+", re.IGNORECASE),
+    re.compile(
+        r"\b(?:github_pat_[A-Za-z0-9_]{12,}|gh[pousr]_[A-Za-z0-9_]{12,}|"
+        r"AIza[A-Za-z0-9_-]{20,}|tskey-[A-Za-z0-9_-]{8,}|xox[baprs]-[A-Za-z0-9-]{8,}|"
+        r"(?:AKIA|ASIA)[A-Z0-9]{16}|[0-9]{6,}:[A-Za-z0-9_-]{30,}|"
+        r"eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{8,})"
+    ),
+    re.compile(r"https?://[^\s/]+:[^\s/@]+@|[?&](?:token|key|secret|sig|signature)=[^\s&]+", re.IGNORECASE),
 )
 _PERSONAL_DATA_PATTERNS = (
     re.compile(r"\b\d{3}-\d{2}-\d{4}\b"),
