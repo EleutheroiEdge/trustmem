@@ -2,23 +2,24 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-TRUSTMEM_DIR_DEFAULT="$(cd "${SCRIPT_DIR}/.." && pwd)"
-TRUSTMEM_DIR="${TRUSTMEM_DIR:-$TRUSTMEM_DIR_DEFAULT}"
-if [[ -d "${TRUSTMEM_DIR}/../memory" ]]; then
-  WORKSPACE_DEFAULT="$(cd "${TRUSTMEM_DIR}/.." && pwd)"
-else
-  WORKSPACE_DEFAULT="${TRUSTMEM_DIR}"
-fi
-WORKSPACE="${WORKSPACE:-$WORKSPACE_DEFAULT}"
-MEM_DIR="${MEM_DIR:-${WORKSPACE}/memory}"
+
+# shellcheck source=scripts/lib.sh
+source "${SCRIPT_DIR}/lib.sh"
+resolve_trustmem_paths "${SCRIPT_DIR}"
+
 VAULT_SYNC_SCRIPT="${VAULT_SYNC_SCRIPT:-${TRUSTMEM_DIR}/scripts/vault_sync.sh}"
+LIVELEARN_SCRIPT="${LIVELEARN_SCRIPT:-${TRUSTMEM_DIR}/scripts/livelearn.sh}"
+PROMOTED_FILE="${MEM_DIR}/.promoted"
+SCORES_FILE="${MEM_DIR}/.scores"
 
 usage() {
   cat <<'USAGE'
 Usage:
-  memoryctl.sh remember "<text>"
+  memoryctl.sh remember [--confirm] [--category <name>] [--ambiguous] "<text>"
+  memoryctl.sh ingest [--confirm] [--category <name>] [--ambiguous] "<text>"
   memoryctl.sh forget "<pattern>"
-  memoryctl.sh sync [--rebuild]
+  memoryctl.sh recall "<query>"
+  memoryctl.sh sync [--rebuild] [--init-promoted]
 USAGE
 }
 
@@ -27,29 +28,93 @@ ensure_paths() {
   mkdir -p "$(dirname "${VAULT_SYNC_SCRIPT}")"
 }
 
+
+add_to_promoted() {
+  local mid="$1" source_file="$2"
+  local ts
+  ts="$(date -Iseconds)"
+  printf '%s\t%s\t%s\n' "${mid}" "${source_file}" "${ts}" >> "${PROMOTED_FILE}"
+}
+
+# Explicit forget is the privacy/deletion exception to the append-only lifecycle.
+#
+# TARGETING: the owner's pattern selects day-file ENTRIES (that is the command's input). Everything derived from those
+# entries is then cleaned by their EXACT stable memory id - never by text - so a memory whose wording merely overlaps with
+# the forgotten one is not touched anywhere.
+#
+# SCOPE OF THE GUARANTEE: after forget, no recoverable copy remains in TrustMem-managed current, generated and backup
+# artifacts covered by this deletion contract (day-files, .scores, .promoted, .access_log, the generated vault and its
+# index, and vault backups under BACKUP_DIR). Filesystem snapshots, OS or third-party backups, Git history and indexes
+# built by other tools are outside it.
+
+# Drop rows whose FIRST tab-separated field is exactly one of the given memory ids (.scores, .promoted).
+remove_rows_by_mid() {
+  local file="$1" mids="$2" field="${3:-1}"
+  [[ -f "${file}" ]] || return 0
+  local tmp="${file}.tmp"
+  awk -F'\t' -v mids="${mids}" -v f="${field}" '
+    BEGIN { n = split(mids, m, "\n"); for (i = 1; i <= n; i++) if (m[i] != "") drop[m[i]] = 1 }
+    !($f in drop) { print }' "${file}" > "${tmp}"
+  mv "${tmp}" "${file}"
+}
+
+# Vault backups written by EARLIER rebuilds. Generated notes carry their source ids in front matter (memory_id /
+# memory_ids) but their fact lines do not, and a note may aggregate several memories - so, exactly like
+# scrub_vault_memory_ids does for the live vault, the whole generated note that references a forgotten id is removed,
+# together with that backup's index.md (an index-only stale copy must not survive). Notes that do not reference a
+# forgotten id are left untouched. Backups are derived artifacts; the surviving memories still live in the day-files.
+purge_vault_backup_mids() {
+  local mids="$1"
+  local backup_dir="${BACKUP_DIR:-${TRUSTMEM_DIR}/vault-backups}"
+  if [[ ! -d "${backup_dir}" ]]; then return 0; fi
+  if [[ -z "${backup_dir}" || "${backup_dir}" == "/" || "${backup_dir}" == "${TRUSTMEM_DIR}" || "${backup_dir}" == "${WORKSPACE}" || -L "${backup_dir}" ]]; then
+    echo "trustmem: refusing unsafe backup scrub target: ${backup_dir}" >&2
+    return 2
+  fi
+  local mid file rel snapshot
+  while IFS= read -r mid; do
+    if [[ -z "${mid}" ]]; then continue; fi
+    while IFS= read -r -d '' file; do
+      rel="${file#"${backup_dir}"/}"
+      snapshot="${backup_dir}/${rel%%/*}"
+      unlink "${file}"
+      if [[ -f "${snapshot}/index.md" ]]; then unlink "${snapshot}/index.md"; fi
+    done < <(rg -l -0 --fixed-strings -- "${mid}" "${backup_dir}" 2>/dev/null || true)
+  done <<< "${mids}"
+}
+
+purge_derived_artifacts_by_mid() {
+  local mids="$1"
+  if [[ -z "${mids}" ]]; then return 0; fi
+  remove_rows_by_mid "${SCORES_FILE}" "${mids}" 1
+  remove_rows_by_mid "${PROMOTED_FILE}" "${mids}" 1
+  remove_rows_by_mid "${MEM_DIR}/.access_log" "${mids}" 3     # epoch, action, MID, snippet
+  scrub_vault_memory_ids "${mids}"
+  purge_vault_backup_mids "${mids}"
+}
+
+run_livelearn_score() {
+  if [[ ! -x "${LIVELEARN_SCRIPT}" ]]; then
+    chmod +x "${LIVELEARN_SCRIPT}" 2>/dev/null || true
+  fi
+  if [[ -x "${LIVELEARN_SCRIPT}" ]]; then
+    "${LIVELEARN_SCRIPT}" score
+  fi
+}
+
 run_vault_sync() {
-  local mode="${1:-}"
   if [[ ! -x "${VAULT_SYNC_SCRIPT}" ]]; then
     chmod +x "${VAULT_SYNC_SCRIPT}"
   fi
-  if [[ "${mode}" == "--rebuild" ]]; then
-    "${VAULT_SYNC_SCRIPT}" --rebuild
-  else
-    "${VAULT_SYNC_SCRIPT}"
-  fi
+  "${VAULT_SYNC_SCRIPT}" "$@"
 }
 
 today_file() {
   date +"%Y-%m-%d"
 }
 
-append_today_note() {
-  local text="$1"
-  local day file stamp
-  day="$(today_file)"
-  file="${MEM_DIR}/${day}.md"
-  stamp="$(date +"%H:%M:%S")"
-
+init_today_file() {
+  local day="$1" file="$2"
   if [[ ! -f "${file}" ]]; then
     cat > "${file}" <<EOF
 # ${day}
@@ -65,31 +130,221 @@ append_today_note() {
 ## Manual Pins
 EOF
   fi
+}
+
+append_today_note() {
+  local text="$1" category="${2:-}" confirmed="${3:-0}" ambiguous="${4:-0}"
+  local day file stamp mid
+  validate_memory_text "${text}" "${category}" "${confirmed}" "${ambiguous}"
+  day="$(today_file)"
+  file="${MEM_DIR}/${day}.md"
+  stamp="$(date +"%H:%M:%S")"
+  mid="$(generate_mid)"
+
+  init_today_file "${day}" "${file}"
 
   if ! rg -q "^## Manual Pins$" "${file}"; then
     printf "\n## Manual Pins\n" >> "${file}"
   fi
 
-  printf -- "- [%s] %s\n" "${stamp}" "${text}" >> "${file}"
-  echo "remembered: ${file}"
+  printf -- "- [mid:%s] [%s] %s\n" "${mid}" "${stamp}" "${text}" >> "${file}"
+  add_to_promoted "${mid}" "${day}.md"
+  echo "remembered: ${file} [mid:${mid}]"
+}
+
+ingest_note() {
+  local text="$1" category="${2:-}" confirmed="${3:-0}" ambiguous="${4:-0}"
+  local day file stamp mid
+  validate_memory_text "${text}" "${category}" "${confirmed}" "${ambiguous}"
+  day="$(today_file)"
+  file="${MEM_DIR}/${day}.md"
+  stamp="$(date +"%H:%M:%S")"
+  mid="$(generate_mid)"
+
+  init_today_file "${day}" "${file}"
+
+  if ! rg -q "^## Manual Pins$" "${file}"; then
+    printf "\n## Manual Pins\n" >> "${file}"
+  fi
+
+  printf -- "- [mid:%s] [%s] %s\n" "${mid}" "${stamp}" "${text}" >> "${file}"
+  echo "ingested: ${file} [mid:${mid}]"
 }
 
 forget_pattern() {
   local pattern="$1"
   local removed=0
+  local forgotten_mids=""
   local f tmp
 
   while IFS= read -r -d '' f; do
     tmp="${f}.tmp"
     if rg -qi --fixed-strings -- "${pattern}" "${f}"; then
-      awk -v pat="${pattern}" 'BEGIN{IGNORECASE=1} index(tolower($0), tolower(pat))==0 {print}' "${f}" > "${tmp}"
+      while IFS= read -r matched_line; do
+        local mid
+        mid="$(extract_mid "${matched_line}")"
+        if [[ -z "${mid}" ]]; then
+          # legacy rows without an explicit id: vault_sync derives the id from the cleaned content - use the same id
+          mid="$(derive_mid_from_content "$(clean_line "$(strip_mid "${matched_line}")")")"
+        fi
+        if [[ -n "${mid}" ]]; then
+          forgotten_mids="${forgotten_mids}${mid}"$'\n'
+        fi
+      done < <(rg -i --fixed-strings -- "${pattern}" "${f}" 2>/dev/null || true)
+      awk -v pat="${pattern}" 'index(tolower($0), tolower(pat))==0 {print}' "${f}" > "${tmp}"
       mv "${tmp}" "${f}"
       removed=$((removed + 1))
     fi
   done < <(find "${MEM_DIR}" -maxdepth 1 -type f -name "*.md" -print0)
 
+  purge_derived_artifacts_by_mid "${forgotten_mids}"
+
   echo "forgotten_pattern: ${pattern}"
   echo "files_changed: ${removed}"
+}
+
+score_for_mid() {
+  local mid="$1"
+  if [[ ! -f "${SCORES_FILE}" || -z "${mid}" ]]; then return; fi
+  local line
+  line="$(awk -F'\t' -v h="${mid}" '$1 == h { print; exit }' "${SCORES_FILE}" 2>/dev/null || true)"
+  if [[ -n "${line}" ]]; then
+    local score reinf
+    score="$(printf '%s' "${line}" | cut -f2)"
+    reinf="$(printf '%s' "${line}" | cut -f5)"
+    printf '[score:%s reinf:%s]' "${score}" "${reinf}"
+  fi
+}
+
+recall_query() {
+  local query="$1"
+  local vault_hits=0
+
+  # ── Search vault (primary) ──
+  if [[ -d "${VAULT_DIR}" ]]; then
+    local index="${VAULT_DIR}/index.md"
+    local index_results=""
+    if [[ -f "${index}" ]]; then
+      index_results="$(rg -i --fixed-strings -- "${query}" "${index}" 2>/dev/null || true)"
+    fi
+    if [[ -n "${index_results}" ]]; then
+      echo "## Index matches"
+      printf '%s\n' "${index_results}"
+      echo ""
+    fi
+
+    echo "## Vault matches"
+    while IFS= read -r match; do
+      local rel="${match#"${VAULT_DIR}"/}"
+      local mid_from_vault=""
+      mid_from_vault="$(rg '^memory_id:' "${match}" 2>/dev/null | head -1 | sed 's/memory_id: *//' || true)"
+      local score_info=""
+      if [[ -n "${mid_from_vault}" ]]; then
+        score_info="$(score_for_mid "${mid_from_vault}")"
+      fi
+      if [[ -n "${score_info}" ]]; then
+        echo "--- ${rel} ${score_info} ---"
+      else
+        echo "--- ${rel} ---"
+      fi
+      rg -i -C 1 --fixed-strings -- "${query}" "${match}"
+      echo ""
+      vault_hits=$((vault_hits + 1))
+    done < <(rg -il --fixed-strings -- "${query}" "${VAULT_DIR}" 2>/dev/null || true)
+  fi
+
+  # ── Fallback: search day-files when vault returned no results ──
+  if [[ "${vault_hits}" -eq 0 && -d "${MEM_DIR}" ]]; then
+    echo "## Day-file matches (vault empty or no vault hits)"
+    local day_hits=0
+    while IFS= read -r match; do
+      local rel
+      rel="$(basename "${match}")"
+      echo "--- ${rel} ---"
+      rg -i -C 1 --fixed-strings -- "${query}" "${match}"
+      echo ""
+      day_hits=$((day_hits + 1))
+    done < <(rg -il --fixed-strings -- "${query}" "${MEM_DIR}"/*.md 2>/dev/null || true)
+    echo "recall: ${day_hits} day-file(s) matched"
+  else
+    echo "recall: ${vault_hits} file(s) matched"
+  fi
+}
+
+init_promoted() {
+  if [[ -f "${PROMOTED_FILE}" ]]; then
+    echo "init-promoted: ${PROMOTED_FILE} already exists. Remove it first to re-initialize." >&2
+    return 1
+  fi
+  local count=0
+  local ts
+  ts="$(date -Iseconds)"
+
+  while IFS= read -r file; do
+    local basename_file
+    basename_file="$(basename "${file}")"
+    while IFS= read -r raw_line; do
+      if [[ -z "${raw_line}" || "${raw_line}" == \#* ]]; then
+        continue
+      fi
+      local mid
+      mid="$(extract_mid "${raw_line}")"
+      if [[ -z "${mid}" ]]; then
+        local cleaned
+        cleaned="$(clean_line "$(strip_mid "${raw_line}")")"
+        if [[ -z "${cleaned}" ]]; then continue; fi
+        mid="$(derive_mid_from_content "${cleaned}")"
+      fi
+      printf '%s\t%s\t%s\n' "${mid}" "${basename_file}" "${ts}" >> "${PROMOTED_FILE}"
+      count=$((count + 1))
+    done < "${file}"
+  done < <(find "${MEM_DIR}" -maxdepth 1 -type f -name "*.md" | sort)
+
+  touch "${MEM_DIR}/.promoted_initialized"
+  echo "init-promoted: ok"
+  echo "entries: ${count}"
+}
+
+parse_intake_args() {
+  INTAKE_CATEGORY=""
+  INTAKE_CONFIRMED=0
+  INTAKE_AMBIGUOUS=0
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --confirm)
+        INTAKE_CONFIRMED=1
+        shift
+        ;;
+      --ambiguous)
+        INTAKE_AMBIGUOUS=1
+        shift
+        ;;
+      --category)
+        if [[ $# -lt 2 ]]; then
+          echo "trustmem: --category requires a value" >&2
+          return 2
+        fi
+        INTAKE_CATEGORY="$2"
+        shift 2
+        ;;
+      --)
+        shift
+        break
+        ;;
+      --*)
+        echo "trustmem: unknown intake option: $1" >&2
+        return 2
+        ;;
+      *)
+        break
+        ;;
+    esac
+  done
+  INTAKE_TEXT="$*"
+  if [[ -z "${INTAKE_TEXT//[[:space:]]/}" ]]; then
+    echo "trustmem: memory text is required" >&2
+    return 2
+  fi
 }
 
 main() {
@@ -104,18 +359,30 @@ main() {
 
   case "${cmd}" in
     remember)
-      append_today_note "$*"
-      run_vault_sync --rebuild
+      parse_intake_args "$@"
+      append_today_note "${INTAKE_TEXT}" "${INTAKE_CATEGORY}" "${INTAKE_CONFIRMED}" "${INTAKE_AMBIGUOUS}"
+      run_livelearn_score
+      run_vault_sync
+      ;;
+    ingest)
+      parse_intake_args "$@"
+      ingest_note "${INTAKE_TEXT}" "${INTAKE_CATEGORY}" "${INTAKE_CONFIRMED}" "${INTAKE_AMBIGUOUS}"
+      run_livelearn_score
       ;;
     forget)
       forget_pattern "$*"
-      run_vault_sync --rebuild
+      # A forget operation must not preserve the forgotten content in the normal
+      # rebuild backup. Recreate the generated vault from surviving day-file rows.
+      run_vault_sync --rebuild --no-backup
+      ;;
+    recall)
+      recall_query "$*"
       ;;
     sync)
-      if [[ "${1:-}" == "--rebuild" ]]; then
-        run_vault_sync --rebuild
+      if [[ "${1:-}" == "--init-promoted" ]]; then
+        init_promoted
       else
-        run_vault_sync
+        run_vault_sync "$@"
       fi
       ;;
     *)

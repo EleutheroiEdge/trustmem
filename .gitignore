@@ -20,6 +20,11 @@ projects/*.md
 *.sqlite
 *.sqlite3
 
+# Downstream policy profiles. Only the shipped generic example is tracked, so a
+# consumer's own profile cannot be committed into a public fork by accident.
+policies/*-memory-policy.yaml
+!policies/example-memory-policy.yaml
+
 # Logs and runtime
 logs/
 tmp/

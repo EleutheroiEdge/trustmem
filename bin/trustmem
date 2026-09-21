@@ -4,16 +4,47 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TRUSTMEM_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
+# shellcheck source=scripts/lib.sh
+source "${TRUSTMEM_DIR}/scripts/lib.sh"
+
 usage() {
   cat <<'USAGE'
 Usage:
   trustmem doctor
-  trustmem remember "<text>"
+  trustmem remember "<text>"        Pin to vault immediately
+  trustmem ingest "<text>"          Score only, promote later
   trustmem forget "<pattern>"
-  trustmem sync [--rebuild]
+  trustmem recall "<query>"         Search vault + score metadata
+  trustmem sync [--rebuild|--init-promoted]
+  trustmem learn <subcommand>       Live-learning engine
+  trustmem --version                Print version
+
+Intake options (remember / ingest):
+  --confirm             Consent to storing detected sensitive content
+  --category <name>     Declare a policy category for the text
+  --ambiguous           Mark the text ambiguous (routed to review, not stored)
+
+Learn subcommands:
+  score, reinforce, decay, consolidate, promote, prune, status, cycle
+
+  'prune' (alias 'prune-scores') is SCORE-BASED: it drops below-threshold
+  entries from the scoring table, the promotion manifest and the generated
+  vault. Learning operations never rewrite day-files (append-only lifecycle).
+  The only command that may remove day-file entries is 'forget' - the explicit
+  privacy/deletion path. It cleans all TrustMem-managed artifacts by exact
+  memory id; external backups and snapshots are outside its reach.
+  Retention-based archival of day-files is a DIFFERENT operation and is not
+  implemented by this engine (see docs/CANONICALIZATION.md).
 
 Environment:
-  TRUSTMEM_DIR, WORKSPACE, MEM_DIR
+  TRUSTMEM_DIR              Installation root
+  WORKSPACE                 Parent of memory/ (defaults to TRUSTMEM_DIR)
+  MEM_DIR                   Day-file directory (default WORKSPACE/memory)
+  VAULT_DIR                 Generated vault (default TRUSTMEM_DIR/vault)
+  POLICY_FILE               Explicit policy path (overrides the profile)
+  TRUSTMEM_POLICY_PROFILE   policies/<profile>-memory-policy.yaml
+  TRUSTMEM_PROJECT_ID       project_id stamped into generated vault notes
+  PROJECT_MAP_FILE          Project/person scope map (default projects-map.yaml)
 USAGE
 }
 
@@ -26,11 +57,20 @@ cmd="$1"
 shift
 
 case "${cmd}" in
+  --version|-v)
+    echo "trustmem ${TRUSTMEM_VERSION}"
+    ;;
+  --help|-h|help)
+    usage
+    ;;
   doctor)
     exec "${TRUSTMEM_DIR}/scripts/doctor.sh" "$@"
     ;;
-  remember|forget|sync)
+  remember|ingest|forget|recall|sync)
     exec "${TRUSTMEM_DIR}/scripts/memoryctl.sh" "${cmd}" "$@"
+    ;;
+  learn)
+    exec "${TRUSTMEM_DIR}/scripts/livelearn.sh" "$@"
     ;;
   *)
     usage

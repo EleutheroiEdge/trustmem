@@ -40,6 +40,64 @@ jobs:
       - name: Run doctor
         run: ./bin/trustmem doctor
 
+  test:
+    name: test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install deps (Ubuntu)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ripgrep
+
+      # The engine requires bash >= 4 (associative arrays, ${var,,}). macOS ships bash 3.2 as /bin/bash,
+      # so the functional suite runs under Homebrew bash there - the same requirement a macOS user has.
+      - name: Install deps (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          brew update
+          brew install ripgrep bash
+          echo "$(brew --prefix)/bin" >> "$GITHUB_PATH"
+
+      - name: Bootstrap
+        run: ./scripts/install.sh
+
+      - name: Show bash version
+        run: bash --version | head -1
+
+      - name: Run functional tests
+        run: bash tests/test_trustmem.sh
+
+  pytest:
+    name: pytest (classifier)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install pytest
+        run: python -m pip install --upgrade pip pytest
+
+      - name: Run classifier tests
+        run: python -m pytest tests/test_memory_policy.py -q
+
   shellcheck:
     name: shellcheck
     runs-on: ubuntu-latest
@@ -53,4 +111,4 @@ jobs:
           sudo apt-get install -y shellcheck
 
       - name: Lint shell scripts
-        run: shellcheck scripts/*.sh bin/trustmem
+        run: shellcheck scripts/*.sh bin/trustmem tests/*.sh

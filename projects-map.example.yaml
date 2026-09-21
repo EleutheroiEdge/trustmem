@@ -1,5 +1,12 @@
+# Copy to projects-map.yaml (git-ignored) and describe YOUR scopes.
+#
+# This file is the ONLY source of project and person scoping. The engine ships
+# with no built-in project list and no built-in person names: without a
+# projects-map.yaml, vault_sync produces decisions and commitments but no
+# project or person notes.
+
 version: 1
-updated_at: 2026-02-15
+updated_at: 2026-01-01
 owner: USER_NAME
 
 identity:
@@ -13,6 +20,8 @@ identity:
       visibility: public
       purpose: primary
 
+# A day-file line mentioning any alias (case-insensitive substring) is filed
+# under that project's generated vault note.
 projects:
   sample-project:
     name: Sample Project
@@ -29,5 +38,21 @@ projects:
     aliases:
       - sample project
       - example.com
+
+# People are matched two ways:
+#   1. @handle mentions — always recognised; unknown handles get a slugified note.
+#   2. bare names — ONLY for aliases listed here, so the engine never guesses
+#      at names it was not told about.
+people:
+  sample-person:
+    name: Sample Person
+    aliases:
+      - sample person
+      - sampleperson
+
+# Words that look like a person but are not (e.g. a product whose name is also
+# a first name). Matching these never creates a person note.
+people_exclude:
+  - sample project
 
 lineage: []

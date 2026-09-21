@@ -1,0 +1,28 @@
+# Synthetic alternate policy profile used only by tests/test_trustmem.sh to
+# prove the policy path is configurable. Indentation is load-bearing.
+
+project: fixture-project
+mode: auto_distilled
+archive: false
+scope:
+  project_id: fixture-project
+  role_default: dev
+  privacy_mode: high
+retention:
+  summaries_days: 30
+  todos_days: 90
+  decisions_days: 365
+  preferences_days: 3650
+filters:
+  store_categories:
+    - decisions
+  block_patterns:
+    - "zzq-fixture-blocked"
+  never_store:
+    - raw_credentials
+    - full_transcripts
+    - private_personal_data
+controls:
+  confirmation:
+    sensitive: always_ask
+    ambiguous: review_queue
